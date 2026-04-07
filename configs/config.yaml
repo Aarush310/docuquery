@@ -1,0 +1,62 @@
+# ═══════════════════════════════════════════════════════
+# DocuQuery — Configuration
+# ═══════════════════════════════════════════════════════
+
+chunking:
+  chunk_size: 600
+  chunk_overlap: 100
+  min_chunk_size: 50
+
+embedding:
+  model: "all-MiniLM-L6-v2"
+
+vector_store:
+  collection_name: "docuquery"
+  persist_directory: "./chroma_db"
+
+retrieval:
+  top_k: 5
+
+  # Hybrid search weights (must sum to 1.0)
+  bm25_weight: 0.3
+  vector_weight: 0.7
+
+  # Cross-encoder re-ranker
+  reranker:
+    enabled: true
+    model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    top_n: 3
+
+generation:
+  model: "llama-3.3-70b-versatile"
+  temperature: 0.1
+  max_tokens: 1024
+  system_prompt: |
+    You are a precise research assistant that answers questions based ONLY on
+    the provided context chunks. You must follow these rules strictly:
+
+    1. Ground every factual claim by citing the relevant chunk ID in square
+       brackets at the end of the sentence, e.g. [abc12345].
+    2. You may cite multiple chunks for a single claim if needed.
+    3. If the provided context does not contain sufficient information to
+       answer the question fully, respond with:
+       "I don't have enough information in the provided documents to answer this question."
+    4. Never fabricate, infer, or extrapolate beyond what the context states.
+    5. Keep answers clear, concise, and well-structured.
+    6. If only part of the question can be answered from context, answer that
+       part and explicitly state what cannot be answered.
+
+evaluation:
+  golden_qa_path: "evals/golden_qa.json"
+  faithfulness_threshold: 0.85
+  citation_coverage_threshold: 0.90
+
+observability:
+  log_dir: "./logs"
+  log_requests: true
+  log_level: "INFO"
+
+app:
+  host: "0.0.0.0"
+  port: 8000
+  title: "DocuQuery"

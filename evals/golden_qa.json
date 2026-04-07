@@ -1,0 +1,52 @@
+[
+  {
+    "question": "What is Retrieval-Augmented Generation and what problem does it solve?",
+    "expected_answer": "RAG enhances LLM outputs by grounding them in external knowledge retrieved at inference time, reducing hallucination.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What are the three stages of a RAG pipeline?",
+    "expected_answer": "Indexing (chunk + embed + store), Retrieval (embed query + find similar), and Generation (LLM produces answer from context).",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What chunk size and overlap is recommended?",
+    "expected_answer": "500-800 tokens per chunk with 100 tokens of overlap.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "How does hybrid retrieval work and why is it better than pure vector search?",
+    "expected_answer": "Hybrid retrieval combines BM25 keyword matching with vector semantic search using weighted fusion. It outperforms either method alone because BM25 catches exact terms while vector search handles paraphrases.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What is a cross-encoder re-ranker and how does it differ from a bi-encoder?",
+    "expected_answer": "A cross-encoder processes query and document together for more accurate relevance scores, unlike bi-encoders which embed them separately. It is slower but more accurate.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What are the key evaluation metrics for RAG systems?",
+    "expected_answer": "Retrieval Precision@k, Retrieval Recall@k, Citation Coverage, Faithfulness, and Answer Relevance.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What are common pitfalls when building RAG systems?",
+    "expected_answer": "Chunks too large or too small, no overlap, ignoring metadata, and having no evaluation dataset.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What production considerations should a RAG system address?",
+    "expected_answer": "Prompt versioning, observability/logging, CI/CD gating with golden datasets, cost tracking, and latency budgeting.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "Which vector databases are commonly used for RAG?",
+    "expected_answer": "ChromaDB, Pinecone, Weaviate, Qdrant, and FAISS.",
+    "relevant_chunk_ids": []
+  },
+  {
+    "question": "What chunking strategies exist and what are their trade-offs?",
+    "expected_answer": "Fixed-size (simple but may split mid-thought), semantic (preserves meaning but variable length), and recursive (tries paragraphs first, then sentences, then tokens).",
+    "relevant_chunk_ids": []
+  }
+]

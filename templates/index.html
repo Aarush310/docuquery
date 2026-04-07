@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuQuery — Knowledge, Cited.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --cream: #f6f1e8;
+            --cream-dark: #ede5d3;
+            --ink: #1a1814;
+            --ink-soft: #2d2a24;
+            --ink-dim: #6b6557;
+            --ink-faint: #a39c8a;
+            --rule: #d8cfb8;
+            --signal: #c8442a;
+            --paper: #fffcf5;
+            --serif: 'Fraunces', Georgia, serif;
+            --sans: 'Inter', -apple-system, sans-serif;
+            --mono: 'JetBrains Mono', 'SF Mono', monospace;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--sans);
+            background: var(--cream);
+            color: var(--ink);
+            min-height: 100vh;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            background-image:
+                radial-gradient(circle at 20% 80%, rgba(200, 68, 42, 0.04) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(26, 24, 20, 0.03) 0%, transparent 50%);
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+            opacity: 0.04;
+            z-index: 1;
+            mix-blend-mode: multiply;
+        }
+
+        .container {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 3rem 2rem 5rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* ─── Header ─── */
+        header {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 2rem;
+            align-items: baseline;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--rule);
+            margin-bottom: 3rem;
+            animation: fadeUp 0.8s ease-out;
+        }
+
+        .masthead {
+            font-family: var(--serif);
+            font-size: 2.2rem;
+            font-weight: 600;
+            letter-spacing: -0.04em;
+            line-height: 0.9;
+            font-variation-settings: "opsz" 144;
+        }
+
+        .masthead em {
+            font-style: italic;
+            color: var(--signal);
+            font-weight: 500;
+        }
+
+        .meta {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .meta-divider {
+            display: inline-block;
+            width: 1px;
+            height: 0.7rem;
+            background: var(--ink-faint);
+            margin: 0 0.5rem;
+            vertical-align: middle;
+        }
+
+        .issue {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-align: right;
+        }
+
+        /* ─── Intro ─── */
+        .intro {
+            margin-bottom: 3rem;
+            animation: fadeUp 0.8s ease-out 0.1s both;
+        }
+
+        .label {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--signal);
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .label::before {
+            content: '';
+            width: 1.5rem;
+            height: 1px;
+            background: var(--signal);
+        }
+
+        .headline {
+            font-family: var(--serif);
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 400;
+            line-height: 1;
+            letter-spacing: -0.035em;
+            margin-bottom: 1.25rem;
+            color: var(--ink);
+            font-variation-settings: "opsz" 144;
+        }
+
+        .headline em {
+            font-style: italic;
+            font-weight: 300;
+            color: var(--ink-dim);
+        }
+
+        .subhead {
+            font-family: var(--serif);
+            font-size: 1.15rem;
+            color: var(--ink-dim);
+            max-width: 580px;
+            line-height: 1.5;
+            font-style: italic;
+        }
+
+        /* ─── Search ─── */
+        .search-section {
+            margin-bottom: 2.5rem;
+            animation: fadeUp 0.8s ease-out 0.2s both;
+        }
+
+        .search-box {
+            position: relative;
+            background: var(--paper);
+            border: 1px solid var(--ink);
+            transition: all 0.3s ease;
+            box-shadow: 6px 6px 0 var(--ink);
+        }
+
+        .search-box:focus-within {
+            box-shadow: 8px 8px 0 var(--signal);
+            transform: translate(-2px, -2px);
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 1.4rem 9rem 1.4rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: var(--ink);
+            font-size: 1.1rem;
+            font-family: var(--serif);
+            outline: none;
+        }
+
+        .search-box input::placeholder {
+            color: var(--ink-faint);
+            font-style: italic;
+        }
+
+        .search-box button {
+            position: absolute;
+            right: 0.8rem;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 0.7rem 1.5rem;
+            background: var(--ink);
+            color: var(--cream);
+            border: none;
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-weight: 500;
+        }
+
+        .search-box button:hover:not(:disabled) { background: var(--signal); }
+        .search-box button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .search-hint {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--ink-dim);
+            margin-top: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* ─── Loading ─── */
+        .loading {
+            display: none;
+            padding: 3rem 0;
+            text-align: center;
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+        }
+
+        .loading.active { display: block; }
+
+        .loading-dots span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: var(--signal);
+            margin: 0 3px;
+            animation: pulse 1.4s infinite ease-in-out both;
+        }
+
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes pulse {
+            0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* ─── Answer ─── */
+        .answer-section {
+            display: none;
+            animation: fadeUp 0.6s ease-out;
+        }
+
+        .answer-section.active { display: block; }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            margin-bottom: 2.5rem;
+            border-top: 1px solid var(--ink);
+            border-bottom: 1px solid var(--ink);
+        }
+
+        .metric {
+            padding: 1rem 0.75rem;
+            text-align: center;
+            border-right: 1px solid var(--rule);
+        }
+
+        .metric:last-child { border-right: none; }
+
+        .metric .value {
+            font-family: var(--serif);
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: var(--ink);
+            line-height: 1;
+            display: block;
+            font-variation-settings: "opsz" 144;
+        }
+
+        .metric .name {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-top: 0.4rem;
+        }
+
+        .answer-card {
+            background: var(--paper);
+            padding: 2.5rem;
+            border: 1px solid var(--ink);
+            box-shadow: 6px 6px 0 var(--ink);
+            margin-bottom: 2rem;
+            position: relative;
+        }
+
+        .answer-card::before {
+            content: '"';
+            position: absolute;
+            top: -0.5rem;
+            left: 1.5rem;
+            font-family: var(--serif);
+            font-size: 5rem;
+            color: var(--signal);
+            line-height: 1;
+            font-style: italic;
+        }
+
+        .answer-content {
+            font-family: var(--serif);
+            font-size: 1.1rem;
+            line-height: 1.75;
+            color: var(--ink);
+            white-space: pre-wrap;
+            padding-top: 0.5rem;
+        }
+
+        .citation {
+            display: inline-block;
+            font-family: var(--mono);
+            font-size: 0.7em;
+            color: var(--signal);
+            background: var(--cream-dark);
+            padding: 0.1em 0.5em;
+            border-radius: 2px;
+            font-weight: 500;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            cursor: pointer;
+            margin: 0 0.1em;
+            vertical-align: middle;
+        }
+
+        .citation:hover {
+            border-color: var(--signal);
+            background: var(--paper);
+        }
+
+        /* ─── Sources ─── */
+        .section-divider {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+        }
+
+        .section-divider::before,
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--rule);
+        }
+
+        .chunks-toggle {
+            background: transparent;
+            border: 1px solid var(--ink);
+            color: var(--ink);
+            padding: 0.6rem 1.25rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: block;
+            margin: 0 auto 1.5rem;
+        }
+
+        .chunks-toggle:hover {
+            background: var(--ink);
+            color: var(--cream);
+        }
+
+        .chunks-list { display: none; }
+        .chunks-list.active { display: block; }
+
+        .chunk-card {
+            background: var(--paper);
+            border: 1px solid var(--rule);
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.2s;
+        }
+
+        .chunk-card:hover {
+            border-color: var(--ink);
+            transform: translateX(-2px);
+        }
+
+        .chunk-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px dashed var(--rule);
+        }
+
+        .chunk-id {
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            color: var(--signal);
+            font-weight: 500;
+        }
+
+        .chunk-meta {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .chunk-text {
+            font-family: var(--serif);
+            font-size: 0.95rem;
+            color: var(--ink-soft);
+            line-height: 1.6;
+            font-style: italic;
+            max-height: 80px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .chunk-text::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 25px;
+            background: linear-gradient(transparent, var(--paper));
+        }
+
+        /* ─── Traces ─── */
+        .traces-section {
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--rule);
+            display: none;
+        }
+
+        .traces-section.active { display: block; }
+
+        .traces-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--mono);
+            font-size: 0.75rem;
+        }
+
+        .traces-table th {
+            text-align: left;
+            padding: 0.75rem 0.5rem;
+            border-bottom: 1px solid var(--ink);
+            color: var(--ink-dim);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-size: 0.65rem;
+        }
+
+        .traces-table td {
+            padding: 0.75rem 0.5rem;
+            border-bottom: 1px dashed var(--rule);
+            color: var(--ink-soft);
+        }
+
+        .traces-table tr:last-child td { border-bottom: none; }
+
+        .status-success { color: var(--ink); font-weight: 500; }
+        .status-error { color: var(--signal); font-weight: 500; }
+
+        /* ─── Footer ─── */
+        footer {
+            margin-top: 4rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--ink);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        footer .colophon {
+            font-family: var(--serif);
+            font-style: italic;
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 0.85rem;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 700px) {
+            .container { padding: 2rem 1.25rem 3rem; }
+            header {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+                text-align: center;
+            }
+            .masthead { font-size: 1.6rem; }
+            .meta, .issue { text-align: center; }
+            .headline { font-size: 2.2rem; }
+            .metrics { grid-template-columns: repeat(2, 1fr); }
+            .metric:nth-child(2n) { border-right: none; }
+            .metric:nth-child(-n+4) { border-bottom: 1px solid var(--rule); }
+            .answer-card { padding: 1.75rem 1.25rem; }
+            .search-box input { padding: 1.1rem 7rem 1.1rem 1.1rem; font-size: 1rem; }
+            .search-box button { padding: 0.55rem 1rem; font-size: 0.7rem; }
+            footer { flex-direction: column; gap: 0.75rem; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="masthead">Docu<em>Query</em></div>
+            <div class="meta">
+                Vol. I
+                <span class="meta-divider"></span>
+                Knowledge, Cited
+                <span class="meta-divider"></span>
+                <span id="dateLine"></span>
+            </div>
+            <div class="issue">№ 001</div>
+        </header>
+
+        <section class="intro">
+            <div class="label">An Editorial Approach to Search</div>
+            <h1 class="headline">Ask. Retrieve.<br><em>Verify.</em></h1>
+            <p class="subhead">Every answer grounded in evidence. Every claim cited to its source. Built on hybrid retrieval, cross-encoder re-ranking, and a healthy distrust of hallucination.</p>
+        </section>
+
+        <section class="search-section">
+            <div class="search-box">
+                <input type="text" id="queryInput" placeholder="What would you like to know?" autofocus>
+                <button id="queryBtn" onclick="submitQuery()">Inquire</button>
+            </div>
+            <div class="search-hint">Press ⏎ to submit · Hover citations to inspect</div>
+        </section>
+
+        <div class="loading" id="loading">
+            <div class="loading-dots"><span></span><span></span><span></span></div>
+            <div style="margin-top: 1rem;">Consulting the archive</div>
+        </div>
+
+        <section class="answer-section" id="answerSection">
+            <div class="metrics" id="metricsBar"></div>
+            <div class="answer-card">
+                <div class="answer-content" id="answerContent"></div>
+            </div>
+            <div class="sources-section">
+                <button class="chunks-toggle" onclick="toggleChunks()">Reveal source passages</button>
+                <div class="chunks-list" id="chunksList"></div>
+            </div>
+        </section>
+
+        <section class="traces-section" id="tracesSection">
+            <div class="section-divider">Request Log</div>
+            <table class="traces-table">
+                <thead>
+                    <tr>
+                        <th>Trace</th><th>Query</th><th>Chunks</th><th>Tokens</th><th>Latency</th><th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tracesBody"></tbody>
+            </table>
+        </section>
+
+        <footer>
+            <div>DocuQuery · Production-Grade RAG</div>
+            <div class="colophon">Built by Aarush Prasad</div>
+            <div>MIT Licensed</div>
+        </footer>
+    </div>
+
+    <script>
+        const dateOpts = { year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('dateLine').textContent =
+            new Date().toLocaleDateString('en-US', dateOpts);
+
+        const input = document.getElementById('queryInput');
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') submitQuery();
+        });
+
+        async function submitQuery() {
+            const query = input.value.trim();
+            if (!query) return;
+
+            const btn = document.getElementById('queryBtn');
+            const loading = document.getElementById('loading');
+            const answerSection = document.getElementById('answerSection');
+
+            btn.disabled = true;
+            loading.classList.add('active');
+            answerSection.classList.remove('active');
+
+            try {
+                const res = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query }),
+                });
+
+                const data = await res.json();
+                if (data.error) { alert('Error: ' + data.error); return; }
+
+                const metricsBar = document.getElementById('metricsBar');
+                metricsBar.innerHTML = `
+                    <div class="metric">
+                        <span class="value">${data.latency_ms.toFixed(0)}<span style="font-size:0.6em;color:var(--ink-dim)">ms</span></span>
+                        <div class="name">Latency</div>
+                    </div>
+                    <div class="metric">
+                        <span class="value">${data.tokens.total}</span>
+                        <div class="name">Tokens</div>
+                    </div>
+                    <div class="metric">
+                        <span class="value">${(data.citation_coverage * 100).toFixed(0)}<span style="font-size:0.6em;color:var(--ink-dim)">%</span></span>
+                        <div class="name">Coverage</div>
+                    </div>
+                    <div class="metric">
+                        <span class="value">${data.citations.length}</span>
+                        <div class="name">Citations</div>
+                    </div>
+                    <div class="metric">
+                        <span class="value">${data.chunks.length}</span>
+                        <div class="name">Sources</div>
+                    </div>
+                `;
+
+                const answer = data.answer.replace(
+                    /\[([a-f0-9]{8})\]/g,
+                    '<span class="citation" title="Source chunk $1">$1</span>'
+                );
+                document.getElementById('answerContent').innerHTML = answer;
+
+                const chunksList = document.getElementById('chunksList');
+                chunksList.innerHTML = data.chunks.map(c => `
+                    <div class="chunk-card">
+                        <div class="chunk-header">
+                            <span class="chunk-id">${c.chunk_id.slice(0, 8)}</span>
+                            <span class="chunk-meta">${c.source} · score ${c.score.toFixed(3)}</span>
+                        </div>
+                        <div class="chunk-text">${escapeHtml(c.text)}</div>
+                    </div>
+                `).join('');
+
+                chunksList.classList.remove('active');
+                document.querySelector('.chunks-toggle').textContent = 'Reveal source passages';
+                answerSection.classList.add('active');
+                loadTraces();
+
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                loading.classList.remove('active');
+            }
+        }
+
+        function toggleChunks() {
+            const list = document.getElementById('chunksList');
+            const btn = document.querySelector('.chunks-toggle');
+            if (list.classList.contains('active')) {
+                list.classList.remove('active');
+                btn.textContent = 'Reveal source passages';
+            } else {
+                list.classList.add('active');
+                btn.textContent = 'Conceal source passages';
+            }
+        }
+
+        async function loadTraces() {
+            try {
+                const res = await fetch('/api/traces?limit=10');
+                const traces = await res.json();
+                if (traces.length > 0) {
+                    document.getElementById('tracesSection').classList.add('active');
+                    const tbody = document.getElementById('tracesBody');
+                    tbody.innerHTML = traces.reverse().map(t => `
+                        <tr>
+                            <td>${t.trace_id}</td>
+                            <td>${escapeHtml(t.query.slice(0, 35))}${t.query.length > 35 ? '…' : ''}</td>
+                            <td>${t.retrieved_chunks.length}</td>
+                            <td>${t.total_tokens}</td>
+                            <td>${t.latency.total_ms.toFixed(0)}ms</td>
+                            <td class="status-${t.status === 'success' ? 'success' : 'error'}">${t.status}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
