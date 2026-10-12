@@ -1,23 +1,14 @@
 """
 test_citations.py — Tests for citation extraction and coverage.
 
-Self-contained: replicates pure functions to avoid heavy ML deps.
+Imports the real functions from src.generator.
 Run: pytest tests/test_citations.py -v
 """
 
-import re
+from src.generator import Generator
 
-
-def extract_citations(text: str) -> list[str]:
-    return re.findall(r"\[([a-f0-9]{8})\]", text)
-
-
-def compute_citation_coverage(text: str) -> float:
-    sentences = [s.strip() for s in re.split(r"[.!?]", text) if len(s.strip().split()) >= 5]
-    if not sentences:
-        return 1.0
-    cited = sum(1 for s in sentences if re.search(r"\[[a-f0-9]{8}\]", s))
-    return cited / len(sentences)
+extract_citations = Generator.extract_citations
+compute_citation_coverage = Generator.compute_citation_coverage
 
 
 class TestCitationExtraction:

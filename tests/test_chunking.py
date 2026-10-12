@@ -1,69 +1,12 @@
 """
 test_chunking.py — Tests for document chunking logic.
 
-Self-contained: replicates pure functions to avoid importing heavy ML deps.
+Imports the real functions from src.ingest, so a change to the chunker
+is actually tested.
 Run: pytest tests/test_chunking.py -v
 """
 
-import hashlib
-import tiktoken
-
-_encoder = tiktoken.get_encoding("cl100k_base")
-
-
-def count_tokens(text: str) -> int:
-    return len(_encoder.encode(text))
-
-
-def generate_chunk_id(source: str, index: int) -> str:
-    raw = f"{source}::{index}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-
-def chunk_text(text, chunk_size=600, chunk_overlap=100, min_chunk_size=50):
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    if not paragraphs:
-        return []
-
-    def _get_overlap(paras, budget):
-        result, total = [], 0
-        for p in reversed(paras):
-            pt = count_tokens(p)
-            if total + pt > budget:
-                break
-            result.insert(0, p)
-            total += pt
-        return result, total
-
-    chunks, cur_paras, cur_tok = [], [], 0
-
-    for para in paragraphs:
-        pt = count_tokens(para)
-        if pt > chunk_size:
-            if cur_paras:
-                chunks.append({"text": "\n\n".join(cur_paras), "token_count": cur_tok})
-                cur_paras, cur_tok = _get_overlap(cur_paras, chunk_overlap)
-            tokens = _encoder.encode(para)
-            s = 0
-            while s < len(tokens):
-                e = min(s + chunk_size, len(tokens))
-                ct = tokens[s:e]
-                if len(ct) >= min_chunk_size:
-                    chunks.append({"text": _encoder.decode(ct), "token_count": len(ct)})
-                s += chunk_size - chunk_overlap
-            continue
-        if cur_tok + pt > chunk_size and cur_paras:
-            chunks.append({"text": "\n\n".join(cur_paras), "token_count": cur_tok})
-            cur_paras, cur_tok = _get_overlap(cur_paras, chunk_overlap)
-        cur_paras.append(para)
-        cur_tok += pt
-
-    if cur_paras:
-        t = "\n\n".join(cur_paras)
-        tc = count_tokens(t)
-        if tc >= min_chunk_size:
-            chunks.append({"text": t, "token_count": tc})
-    return chunks
+from src.ingest import chunk_text, count_tokens, generate_chunk_id
 
 
 class TestCountTokens:

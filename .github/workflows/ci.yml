@@ -29,6 +29,34 @@ jobs:
       - name: Run unit tests
         run: pytest tests/ -v --tb=short
 
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t docuquery:ci .
+
+      # OpenShift starts containers with a random UID in group 0.
+      # Running the same way here proves the image doesn't need root.
+      - name: Start container as a random non-root user
+        run: docker run -d --name docuquery -p 8000:8000 --user 1000870000:0 docuquery:ci
+
+      - name: Wait for the health check
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fs http://localhost:8000/healthz; then echo; echo "healthy"; exit 0; fi
+            sleep 2
+          done
+          docker logs docuquery
+          exit 1
+
+      - name: Container logs
+        if: always()
+        run: docker logs docuquery || true
+
   evaluate:
     runs-on: ubuntu-latest
     needs: test
@@ -52,7 +80,7 @@ jobs:
 
       - name: Run evaluation (CI gate)
         env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python -m src.evaluate --ci
 
       - name: Upload evaluation results

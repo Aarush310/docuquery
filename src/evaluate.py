@@ -169,20 +169,9 @@ def run_evaluation(config: dict, ci_mode: bool = False):
 
     console.print(detail_table)
 
-    # ── CI Gate ──
     all_pass = cov_pass and faith_pass
-    console.print()
 
-    if all_pass:
-        console.print("[bold green]✅ All quality gates passed.[/bold green]\n")
-        if ci_mode:
-            sys.exit(0)
-    else:
-        console.print("[bold red]❌ Quality gates FAILED — PR should be blocked.[/bold red]\n")
-        if ci_mode:
-            sys.exit(1)
-
-    # Write results to file for CI artifacts
+    # Write results first, so the CI artifact exists whether the gate passes or fails
     output_path = Path("evals/results.json")
     with open(output_path, "w") as f:
         json.dump({
@@ -199,6 +188,15 @@ def run_evaluation(config: dict, ci_mode: bool = False):
         }, f, indent=2)
 
     console.print(f"[dim]Results written to {output_path}[/dim]\n")
+
+    # ── CI Gate ──
+    if all_pass:
+        console.print("[bold green]✅ All quality gates passed.[/bold green]\n")
+    else:
+        console.print("[bold red]❌ Quality gates FAILED — PR should be blocked.[/bold red]\n")
+
+    if ci_mode:
+        sys.exit(0 if all_pass else 1)
 
 
 def main():
