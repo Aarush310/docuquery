@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)]()
+[![CI](https://github.com/Aarush310/docuquery/actions/workflows/ci.yml/badge.svg)](https://github.com/Aarush310/docuquery/actions/workflows/ci.yml)
 
 A production-grade **Retrieval-Augmented Generation** system that answers questions grounded in your documents with verifiable citations. Built with hybrid retrieval (BM25 + vector search), cross-encoder re-ranking, full observability, automated evaluation with CI gating, and a clean web interface.
 
