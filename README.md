@@ -1,166 +1,163 @@
 # 📚 DocuQuery — Production-Grade RAG System
 
+[![CI](https://github.com/Aarush310/docuquery/actions/workflows/ci.yml/badge.svg)](https://github.com/Aarush310/docuquery/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)]()
 
-A production-grade **Retrieval-Augmented Generation** system that answers questions grounded in your documents with verifiable citations. Built with hybrid retrieval (BM25 + vector search), cross-encoder re-ranking, full observability, automated evaluation with CI gating, and a clean web interface.
+A **Retrieval-Augmented Generation** service that answers questions from your documents with verifiable citations. Hybrid retrieval (BM25 + dense vectors), cross-encoder re-ranking, citation enforcement, per-request tracing, Prometheus metrics with quality alerts, an LLM-as-judge evaluation gate in CI, and a container image that runs on Docker, Podman and OpenShift.
 
 ## ✨ Features
 
-- **Hybrid Retrieval** — BM25 keyword matching + vector semantic search with configurable fusion weights
-- **Cross-Encoder Re-ranking** — Re-scores retrieved chunks with a cross-encoder for higher precision
-- **Citation Enforcement** — Every claim cites its source chunk; declines when evidence is insufficient
-- **Multi-format Ingestion** — PDF, Markdown, plain text, with automatic chunking and overlap
-- **Web UI** — Clean FastAPI + HTML interface for interactive querying
-- **CLI Interface** — Full-featured command-line tool with rich formatting
-- **Observability** — Request tracing, latency tracking (P50/P95), token accounting, per-request logs
-- **Automated Evaluation** — Golden Q/A dataset with faithfulness scoring, citation coverage, and CI gating
-- **Prompt Versioning** — All prompts and configs tracked in version control
-- **Fully Configurable** — Single YAML config controls every parameter
+- **Hybrid retrieval** — BM25 keyword scores + dense vector similarity, normalized and fused with configurable weights (0.3 / 0.7)
+- **Cross-encoder re-ranking** — `ms-marco-MiniLM-L-6-v2` re-scores (query, chunk) pairs jointly; top 3 go to the LLM
+- **Citation enforcement** — every claim must cite a chunk ID; coverage is measured per answer and citations to chunks that weren't retrieved are flagged
+- **Pluggable LLM** — Groq (Llama 3.3 70B, free tier) or Anthropic Claude, switched by config or env var
+- **Observability** — per-request traces (JSON lines), per-stage latency, token accounting, throughput, `/metrics` for Prometheus
+- **Quality alerting** — answers below the citation-coverage SLO, slower than the latency SLO, or with invalid citations are logged as `QUALITY ALERT` and counted in `docuquery_quality_alerts_total{reason}`
+- **Evaluation gate** — golden Q/A set scored on 5 gates; CI fails the PR if any is breached
+- **Container-ready** — non-root image with models baked in, liveness/readiness probes, OpenShift manifests
 
 ## Architecture
 
 ```
-                    ┌──────────────┐
-                    │   Web UI /   │
-                    │   CLI        │
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │  Orchestrator │  ← Coordinates the full pipeline
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-       ┌──────▼──────┐  ┌─▼──────┐  ┌──▼─────────┐
-       │  BM25 Index  │  │ Vector │  │ Cross-Enc.  │
-       │  (rank_bm25) │  │  DB    │  │ Re-ranker   │
-       └──────┬───────┘  │(Chroma)│  └──────┬──────┘
-              │          └───┬────┘         │
-              └──────┬───────┘     ┌────────┘
-                     │             │
-              ┌──────▼─────────────▼──┐
-              │   Score Fusion &      │
-              │   Re-rank Pipeline    │
-              └──────────┬────────────┘
-                         │
-              ┌──────────▼────────────┐
-              │   LLM Generator       │
-              │   (cited answers)     │
-              └──────────┬────────────┘
-                         │
-              ┌──────────▼────────────┐
-              │   Observability       │
-              │   Logger / Tracer     │
-              └───────────────────────┘
+                   ┌───────────────┐
+                   │ Web UI / CLI  │
+                   └───────┬───────┘
+                           │  POST /api/query
+                   ┌───────▼───────┐
+                   │ Orchestrator  │ ─── trace + metrics + quality alerts ──▶ /metrics, logs/traces.jsonl
+                   └───────┬───────┘
+             ┌─────────────┼──────────────┐
+      ┌──────▼──────┐ ┌────▼─────┐        │
+      │ BM25 index  │ │ ChromaDB │        │
+      │ (rank_bm25) │ │ (cosine) │        │
+      └──────┬──────┘ └────┬─────┘        │
+             └──── fuse ───┘              │
+                   │ top 5                │
+          ┌────────▼─────────┐            │
+          │ Cross-encoder    │ top 3      │
+          │ re-ranker        ├────────────┘
+          └────────┬─────────┘
+          ┌────────▼─────────┐
+          │ LLM (Groq/Claude)│ → cited answer + coverage
+          └──────────────────┘
 ```
 
-## Quick Start
+**Ingestion:** PDF (PyMuPDF), Markdown and text → paragraph-aware chunks of ≤600 tokens (tiktoken `cl100k_base`) with ~100 tokens of paragraph overlap → `all-MiniLM-L6-v2` embeddings → ChromaDB. Chunk IDs are `sha256(path::index)[:16]`, so re-ingesting is deterministic.
+
+## Quick start
 
 ```bash
-# Clone
-git clone https://github.com/YOUR_USERNAME/docuquery.git
-cd docuquery
-
-# Setup
-python -m venv venv
-source venv/bin/activate        # macOS/Linux
+git clone https://github.com/Aarush310/docuquery.git && cd docuquery
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# Configure
-export GOOGLE_API_KEY="your-gemini-api-key-here"
+export GROQ_API_KEY="..."                      # default provider
+# or: export DOCUQUERY_LLM_PROVIDER=anthropic ANTHROPIC_API_KEY="..."
 
-# Ingest your documents
-python -m src.ingest --source data/
-
-# Query via CLI
+python -m src.ingest --source data/            # build the index
 python -m src.query "What is hybrid retrieval?" --verbose
-
-# Or launch the web UI
-python -m src.app
-# → Open http://localhost:8000
+python -m src.app                              # → http://localhost:8000
 ```
 
-## Project Structure
+## Run in a container
 
+```bash
+docker build -t docuquery .                    # or: podman build -t docuquery .
+docker run -p 8000:8000 -e GROQ_API_KEY=... -v docuquery-data:/app/var docuquery
 ```
-docuquery/
-├── README.md
-├── LICENSE
-├── requirements.txt
-├── .gitignore
-├── configs/
-│   └── config.yaml              # All tuneable parameters
-├── data/                         # Drop your documents here
-│   └── sample.md                 # Example document included
-├── src/
-│   ├── __init__.py
-│   ├── config.py                 # Config loader
-│   ├── ingest.py                 # Document loading + chunking + embedding
-│   ├── retriever.py              # Hybrid retrieval (BM25 + vector)
-│   ├── reranker.py               # Cross-encoder re-ranker
-│   ├── generator.py              # LLM answer generation with citations
-│   ├── orchestrator.py           # End-to-end pipeline coordinator
-│   ├── observability.py          # Request tracing & metrics
-│   ├── query.py                  # CLI entry point
-│   ├── evaluate.py               # Evaluation pipeline + CI gating
-│   └── app.py                    # FastAPI web application
-├── templates/
-│   └── index.html                # Web UI template
-├── evals/
-│   └── golden_qa.json            # Golden Q/A evaluation dataset
-└── tests/
-    ├── test_chunking.py
-    ├── test_retriever.py
-    └── test_evaluation.py
+
+On first start the entrypoint ingests `data/` into the volume, then serves the API. The image runs as a non-root user, works with OpenShift's random-UID policy, and needs no internet access for models.
+
+### Deploy to OpenShift
+
+```bash
+oc new-project docuquery
+oc create secret generic docuquery-llm --from-literal=GROQ_API_KEY=...
+oc apply -f deploy/openshift/docuquery.yaml    # PVC, Deployment (startup/liveness/readiness probes), Service, Route
 ```
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/query` | `{"query": "...", "top_k": 5}` → answer, citations, coverage, chunks, latency, tokens |
+| `POST` | `/api/ingest` | `{"source": "data/"}` → re-index (only paths inside `data/` are accepted) |
+| `GET` | `/api/metrics` | P50/P95 latency, error rate, tokens, throughput (req/min), alert count |
+| `GET` | `/api/traces` | Recent request traces |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe — models loaded and index available |
+| `GET` | `/metrics` | Prometheus metrics |
+
+Prometheus metrics: `docuquery_requests_total{status}`, `docuquery_stage_latency_seconds{stage}` (retrieval, reranking, generation, total), `docuquery_tokens_total{type}`, `docuquery_citation_coverage`, `docuquery_quality_alerts_total{reason}`.
+
+## Evaluation & CI gating
+
+```bash
+python -m src.evaluate            # full report, writes evals/results.json
+python -m src.evaluate --ci       # exit 1 if any gate fails
+python -m src.evaluate --no-judge # skip the LLM-judge gates
+```
+
+Each golden question runs through the full pipeline; an LLM judge then scores the answer against the retrieved chunks and the reference answer.
+
+| Gate | How it's measured | Threshold |
+|---|---|---|
+| Citation coverage | Share of answer sentences (5+ words) carrying a chunk citation | ≥ 90% |
+| Faithfulness | LLM judge: share of claims supported by the retrieved chunks | ≥ 85% |
+| Answer correctness | LLM judge: agreement with the golden reference answer | ≥ 75% |
+| Latency P95 | End-to-end pipeline latency | ≤ 8000 ms |
+| Error rate | Questions that failed outright | 0% |
+
+GitHub Actions runs four jobs: **unit tests** on Python 3.11/3.12/3.13, a **container** job that builds the image, starts it as a random non-root UID and checks `/healthz`, `/readyz` and `/metrics`, **manifest validation** with kubeconform, and on pull requests the **evaluation gate** (needs a `GROQ_API_KEY` repository secret; skipped with a warning if absent). Results are uploaded as a build artifact.
 
 ## Configuration
 
-All parameters are in `configs/config.yaml`:
+Everything lives in `configs/config.yaml`; environment variables override it per deployment:
 
-| Section | Key Parameters |
-|---------|---------------|
-| **Chunking** | `chunk_size` (600), `chunk_overlap` (100), `min_chunk_size` (50) |
-| **Embedding** | `model` (all-MiniLM-L6-v2) |
-| **Retrieval** | `top_k` (5), `bm25_weight` (0.3), `vector_weight` (0.7) |
-| **Re-ranker** | `model` (cross-encoder/ms-marco-MiniLM-L-6-v2), `top_n` (3) |
-| **Generation** | `model` (gemini-2.0-flash), `temperature` (0.1) |
-| **Evaluation** | `faithfulness_threshold` (0.85), `citation_coverage_threshold` (0.90) |
+| Variable | Overrides |
+|---|---|
+| `DOCUQUERY_LLM_PROVIDER` | `generation.provider` (`groq` or `anthropic`; also switches to that provider's default model) |
+| `DOCUQUERY_LLM_MODEL` | `generation.model` |
+| `DOCUQUERY_CHROMA_DIR` | `vector_store.persist_directory` |
+| `DOCUQUERY_LOG_DIR` | `observability.log_dir` |
+| `DOCUQUERY_DATA_DIR` | `ingest.allowed_root` |
 
-## Evaluation & CI Gating
+## Project structure
 
-```bash
-# Run evaluation against golden dataset
-python -m src.evaluate
-
-# Use as CI gate (exits non-zero if quality drops)
-python -m src.evaluate --ci
+```
+docuquery/
+├── configs/config.yaml        # all tuneable parameters and quality thresholds
+├── data/                      # documents to ingest
+├── evals/golden_qa.json       # golden Q/A set
+├── src/
+│   ├── ingest.py              # load → chunk → embed → store
+│   ├── retriever.py           # BM25 + vector hybrid retrieval
+│   ├── reranker.py            # cross-encoder re-ranker
+│   ├── generator.py           # LLM providers + cited generation
+│   ├── orchestrator.py        # pipeline coordinator with tracing
+│   ├── observability.py       # traces, Prometheus metrics, quality alerts
+│   ├── evaluate.py            # 5-gate evaluation + CI gating
+│   ├── app.py                 # FastAPI app, probes, /metrics
+│   └── query.py               # CLI
+├── tests/                     # pytest suite (runs without models or API keys)
+├── Dockerfile, docker-entrypoint.sh
+├── deploy/openshift/          # PVC, Deployment, Service, Route
+└── .github/workflows/ci.yml
 ```
 
-The evaluation pipeline measures retrieval precision, citation coverage, faithfulness, and latency percentiles. In CI mode, the process exits with code 1 if any quality threshold is breached, blocking the PR merge.
+## Tests
 
-## Key Metrics
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
 
-| Metric | Description | Target |
-|--------|-------------|--------|
-| Retrieval Precision@k | % of top-k chunks that are relevant | ≥ 80% |
-| Citation Coverage | % of answer claims backed by a cited chunk | ≥ 90% |
-| Faithfulness | % of cited claims actually supported by source | ≥ 85% |
-| Latency P50 | Median end-to-end response time | < 3s |
-| Latency P95 | 95th percentile response time | < 8s |
+The suite covers chunking, citation parsing, score fusion and re-ranking, provider clients, config overrides, the orchestrator (with fake components), evaluation gates and judge parsing, observability/alerts, and the HTTP API — with no ML models, vector DB or API keys needed.
 
-## Tech Stack
+## Tech stack
 
-- **Python 3.11+** — Core language
-- **ChromaDB** — Vector storage and similarity search
-- **sentence-transformers** — Embedding and cross-encoder models
-- **rank-bm25** — BM25 keyword retrieval
-- **Google Gemini API** — LLM generation (gemini-2.0-flash, free tier)
-- **FastAPI** — Web API and UI server
-- **tiktoken** — Token counting
-- **Rich** — Terminal formatting
+Python 3.11+ · FastAPI · ChromaDB · sentence-transformers · rank-bm25 · Groq / Anthropic Claude · tiktoken · prometheus-client · Docker / OpenShift · GitHub Actions
 
 ## License
 

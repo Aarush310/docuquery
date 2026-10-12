@@ -30,14 +30,18 @@ class RAGOrchestrator:
         print(result.answer)
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, retriever=None, reranker=None, generator=None, obs=None):
+        # Components are injectable so the pipeline can be tested without models or API keys.
         self.config = config
-        self.retriever = Retriever(config)
-        self.generator = Generator(config)
-        self.obs = ObservabilityLogger(config)
+        self.retriever = retriever or Retriever(config)
+        self.generator = generator or Generator(config)
+        self.obs = obs or ObservabilityLogger(config)
 
         reranker_cfg = config["retrieval"]["reranker"]
-        self.reranker = Reranker(config) if reranker_cfg.get("enabled", False) else None
+        if reranker is not None:
+            self.reranker = reranker
+        else:
+            self.reranker = Reranker(config) if reranker_cfg.get("enabled", False) else None
 
     def query(self, question: str, top_k: int | None = None) -> GeneratedAnswer:
         """
@@ -105,6 +109,8 @@ class RAGOrchestrator:
             latency.generation_ms = t.elapsed_ms
 
             latency.total_ms = latency.retrieval_ms + latency.reranking_ms + latency.generation_ms
+            # Report end-to-end pipeline latency, not just the LLM call.
+            result.latency_ms = latency.total_ms
 
             # ── 4. Record trace ──
             trace.answer = result.answer
@@ -113,6 +119,8 @@ class RAGOrchestrator:
             trace.completion_tokens = result.completion_tokens
             trace.total_tokens = result.total_tokens
             trace.citation_count = len(result.citations)
+            trace.citation_coverage = result.citation_coverage
+            trace.invalid_citations = result.invalid_citations
             trace.latency = latency
             trace.status = "success"
 
