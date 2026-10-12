@@ -24,7 +24,10 @@ class TestChunking:
         text = ("This is a short paragraph that has just enough words and tokens in it to clear the "
                 "minimum chunk size threshold imposed by the default chunking configuration so the "
                 "test passes reliably across environments.")
-        assert len(chunk_text(text, chunk_size=600)) == 1
+        assert len(chunk_text(text, chunk_size=600, min_chunk_size=10)) == 1
+
+    def test_text_below_min_size_is_dropped(self):
+        assert chunk_text("Too short to keep.", chunk_size=600, min_chunk_size=50) == []
 
     def test_long_text_multiple_chunks(self):
         text = "\n\n".join([f"Paragraph {i}. " * 30 for i in range(20)])
