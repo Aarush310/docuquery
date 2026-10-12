@@ -8,8 +8,6 @@ Cross-encoders are slower than bi-encoders but significantly more accurate,
 which is why we apply them only to the top-k candidates from initial retrieval.
 """
 
-from sentence_transformers import CrossEncoder
-
 from src.retriever import RetrievedChunk
 
 
@@ -19,6 +17,7 @@ class Reranker:
     def __init__(self, config: dict):
         reranker_cfg = config["retrieval"]["reranker"]
         self.top_n = reranker_cfg["top_n"]
+        from sentence_transformers import CrossEncoder
         self.model = CrossEncoder(reranker_cfg["model"])
 
     def rerank(self, query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:

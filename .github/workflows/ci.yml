@@ -1,62 +1,112 @@
-name: CI — Tests & Evaluation
+name: CI — Tests, Container & Evaluation
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
+          cache: pip
+      - name: Install dependencies (CPU-only PyTorch)
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
       - name: Run unit tests
-        run: pytest tests/ -v --tb=short
+        run: |
+          set -o pipefail
+          pytest tests/ -v --tb=short 2>&1 | tee pytest.log
+      - name: Surface test failures as annotations
+        if: failure()
+        run: |
+          grep -E "^(FAILED|ERROR)|^E  " pytest.log | head -40 | while IFS= read -r line; do
+            echo "::error title=pytest::${line}"
+          done
+
+  container:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t docuquery:ci .
+      # OpenShift starts containers with a random UID in group 0 — run the same way here.
+      - name: Start container as a random non-root UID
+        run: |
+          docker run -d --name docuquery -p 8000:8000 --user 1000870000:0 \
+            -e GROQ_API_KEY=dummy-key-for-smoke-test docuquery:ci
+      - name: Liveness, readiness and metrics probes
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8000/healthz; then echo; break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/readyz | tee /dev/stderr | grep -q '"status":"ready"'
+          curl -fsS http://localhost:8000/metrics | grep -q docuquery_requests_total
+          echo "container healthy, index loaded, metrics exposed"
+      - name: Container logs
+        if: always()
+        run: docker logs docuquery || true
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Kubernetes/OpenShift manifests
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          # Route is an OpenShift CRD with no upstream schema; everything else is validated strictly.
+          ./kubeconform -strict -summary -ignore-missing-schemas deploy/openshift/
 
   evaluate:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'pull_request'
-
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Check for API key
+        id: key
+        run: |
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "::warning::GROQ_API_KEY secret is not set — skipping the evaluation gate. Add it under Settings → Secrets and variables → Actions."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.key.outputs.present == 'true'
         with:
           python-version: "3.12"
-
+          cache: pip
       - name: Install dependencies
+        if: steps.key.outputs.present == 'true'
         run: |
           python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
-
       - name: Ingest documents
+        if: steps.key.outputs.present == 'true'
         run: python -m src.ingest --source data/
-
-      - name: Run evaluation (CI gate)
-        env:
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      - name: Run evaluation (CI quality gate)
+        if: steps.key.outputs.present == 'true'
         run: python -m src.evaluate --ci
-
       - name: Upload evaluation results
-        if: always()
+        if: always() && steps.key.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: evaluation-results

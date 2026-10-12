@@ -1,69 +1,11 @@
 """
-test_chunking.py — Tests for document chunking logic.
-
-Self-contained: replicates pure functions to avoid importing heavy ML deps.
+test_chunking.py — Tests for document loading and chunking (src/ingest.py).
 Run: pytest tests/test_chunking.py -v
 """
 
-import hashlib
-import tiktoken
+import pytest
 
-_encoder = tiktoken.get_encoding("cl100k_base")
-
-
-def count_tokens(text: str) -> int:
-    return len(_encoder.encode(text))
-
-
-def generate_chunk_id(source: str, index: int) -> str:
-    raw = f"{source}::{index}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-
-def chunk_text(text, chunk_size=600, chunk_overlap=100, min_chunk_size=50):
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    if not paragraphs:
-        return []
-
-    def _get_overlap(paras, budget):
-        result, total = [], 0
-        for p in reversed(paras):
-            pt = count_tokens(p)
-            if total + pt > budget:
-                break
-            result.insert(0, p)
-            total += pt
-        return result, total
-
-    chunks, cur_paras, cur_tok = [], [], 0
-
-    for para in paragraphs:
-        pt = count_tokens(para)
-        if pt > chunk_size:
-            if cur_paras:
-                chunks.append({"text": "\n\n".join(cur_paras), "token_count": cur_tok})
-                cur_paras, cur_tok = _get_overlap(cur_paras, chunk_overlap)
-            tokens = _encoder.encode(para)
-            s = 0
-            while s < len(tokens):
-                e = min(s + chunk_size, len(tokens))
-                ct = tokens[s:e]
-                if len(ct) >= min_chunk_size:
-                    chunks.append({"text": _encoder.decode(ct), "token_count": len(ct)})
-                s += chunk_size - chunk_overlap
-            continue
-        if cur_tok + pt > chunk_size and cur_paras:
-            chunks.append({"text": "\n\n".join(cur_paras), "token_count": cur_tok})
-            cur_paras, cur_tok = _get_overlap(cur_paras, chunk_overlap)
-        cur_paras.append(para)
-        cur_tok += pt
-
-    if cur_paras:
-        t = "\n\n".join(cur_paras)
-        tc = count_tokens(t)
-        if tc >= min_chunk_size:
-            chunks.append({"text": t, "token_count": tc})
-    return chunks
+from src.ingest import IngestError, chunk_text, collect_files, count_tokens, generate_chunk_id
 
 
 class TestCountTokens:
@@ -79,18 +21,41 @@ class TestCountTokens:
 
 class TestChunking:
     def test_short_text_single_chunk(self):
-        text = "This is a short paragraph that has just enough words and tokens in it to clear the minimum chunk size threshold imposed by the default chunking configuration so the test passes reliably across environments."
-        assert len(chunk_text(text, chunk_size=600)) == 1
+        text = ("This is a short paragraph that has just enough words and tokens in it to clear the "
+                "minimum chunk size threshold imposed by the default chunking configuration so the "
+                "test passes reliably across environments.")
+        assert len(chunk_text(text, chunk_size=600, min_chunk_size=10)) == 1
+
+    def test_text_below_min_size_is_dropped(self):
+        assert chunk_text("Too short to keep.", chunk_size=600, min_chunk_size=50) == []
 
     def test_long_text_multiple_chunks(self):
         text = "\n\n".join([f"Paragraph {i}. " * 30 for i in range(20)])
         assert len(chunk_text(text, chunk_size=200, chunk_overlap=50)) > 1
+
+    def test_chunks_respect_size_limit(self):
+        text = "\n\n".join([f"Paragraph {i}. " * 30 for i in range(20)])
+        for chunk in chunk_text(text, chunk_size=200, chunk_overlap=50):
+            assert chunk["token_count"] <= 200
 
     def test_overlap_more_chunks(self):
         text = "\n\n".join([f"Para {i}. " * 40 for i in range(10)])
         few = chunk_text(text, chunk_size=200, chunk_overlap=20)
         many = chunk_text(text, chunk_size=200, chunk_overlap=100)
         assert len(many) >= len(few)
+
+    def test_overlap_repeats_trailing_paragraph(self):
+        paras = [f"Unique paragraph {i} " + "filler " * 20 for i in range(6)]
+        per_para = max(count_tokens(p) for p in paras)
+        # Room for ~3 paragraphs per chunk, overlap budget fits exactly one.
+        chunks = chunk_text("\n\n".join(paras), chunk_size=3 * per_para + 2,
+                            chunk_overlap=per_para + 1, min_chunk_size=1)
+        assert len(chunks) > 1
+        # Some paragraph must appear at the end of one chunk and the start of the next.
+        assert any(
+            a["text"].split("\n\n")[-1] == b["text"].split("\n\n")[0]
+            for a, b in zip(chunks, chunks[1:])
+        )
 
     def test_min_filter(self):
         assert len(chunk_text("Tiny.\n\nAlso tiny.", chunk_size=600, min_chunk_size=100)) <= 1
@@ -123,3 +88,22 @@ class TestChunkId:
 
     def test_hex(self):
         assert all(c in "0123456789abcdef" for c in generate_chunk_id("t", 42))
+
+
+class TestCollectFiles:
+    def test_directory_filters_supported_types(self, tmp_path):
+        (tmp_path / "a.md").write_text("x")
+        (tmp_path / "b.txt").write_text("x")
+        (tmp_path / "c.png").write_bytes(b"x")
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "sub" / "d.pdf").write_bytes(b"x")
+        assert sorted(p.name for p in collect_files(tmp_path)) == ["a.md", "b.txt", "d.pdf"]
+
+    def test_missing_path_raises(self, tmp_path):
+        with pytest.raises(IngestError, match="not found"):
+            collect_files(tmp_path / "nope")
+
+    def test_no_supported_files_raises(self, tmp_path):
+        (tmp_path / "c.png").write_bytes(b"x")
+        with pytest.raises(IngestError, match="No supported"):
+            collect_files(tmp_path)

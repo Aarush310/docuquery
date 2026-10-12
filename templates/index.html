@@ -636,7 +636,11 @@
                 });
 
                 const data = await res.json();
-                if (data.error) { alert('Error: ' + data.error); return; }
+                if (!res.ok || data.error) {
+                    const msg = data.error || (Array.isArray(data.detail) ? data.detail.map(d => d.msg).join('; ') : data.detail);
+                    alert('Error: ' + (msg || res.statusText));
+                    return;
+                }
 
                 const metricsBar = document.getElementById('metricsBar');
                 metricsBar.innerHTML = `
@@ -662,7 +666,8 @@
                     </div>
                 `;
 
-                const answer = data.answer.replace(
+                // Escape the model output before adding citation markup (no HTML injection from documents).
+                const answer = escapeHtml(data.answer).replace(
                     /\[([a-f0-9]{8})\]/g,
                     '<span class="citation" title="Source chunk $1">$1</span>'
                 );
@@ -673,7 +678,7 @@
                     <div class="chunk-card">
                         <div class="chunk-header">
                             <span class="chunk-id">${c.chunk_id.slice(0, 8)}</span>
-                            <span class="chunk-meta">${c.source} · score ${c.score.toFixed(3)}</span>
+                            <span class="chunk-meta">${escapeHtml(c.source)} · score ${c.score.toFixed(3)}</span>
                         </div>
                         <div class="chunk-text">${escapeHtml(c.text)}</div>
                     </div>
@@ -713,7 +718,7 @@
                     const tbody = document.getElementById('tracesBody');
                     tbody.innerHTML = traces.reverse().map(t => `
                         <tr>
-                            <td>${t.trace_id}</td>
+                            <td>${escapeHtml(t.trace_id)}</td>
                             <td>${escapeHtml(t.query.slice(0, 35))}${t.query.length > 35 ? '…' : ''}</td>
                             <td>${t.retrieved_chunks.length}</td>
                             <td>${t.total_tokens}</td>
