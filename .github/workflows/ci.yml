@@ -11,6 +11,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
@@ -25,7 +26,15 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-dev.txt
       - name: Run unit tests
-        run: pytest tests/ -v --tb=short
+        run: |
+          set -o pipefail
+          pytest tests/ -v --tb=short 2>&1 | tee pytest.log
+      - name: Surface test failures as annotations
+        if: failure()
+        run: |
+          grep -E "^(FAILED|ERROR)|^E  " pytest.log | head -40 | while IFS= read -r line; do
+            echo "::error title=pytest::${line}"
+          done
 
   container:
     runs-on: ubuntu-latest
