@@ -28,6 +28,10 @@ retrieval:
     top_n: 3
 
 generation:
+  # LLM provider: "groq" (Llama 3.3 70B, free tier — needs GROQ_API_KEY)
+  #            or "anthropic" (Claude — needs ANTHROPIC_API_KEY).
+  # Override at runtime with DOCUQUERY_LLM_PROVIDER / DOCUQUERY_LLM_MODEL.
+  provider: "groq"
   model: "llama-3.3-70b-versatile"
   temperature: 0.1
   max_tokens: 1024
@@ -48,13 +52,28 @@ generation:
 
 evaluation:
   golden_qa_path: "evals/golden_qa.json"
-  faithfulness_threshold: 0.85
-  citation_coverage_threshold: 0.90
+  results_path: "evals/results.json"
+  # Quality gates — CI fails the PR if any is breached
+  citation_coverage_threshold: 0.90     # rule-based: cited sentences / sentences
+  faithfulness_threshold: 0.85          # LLM judge: claims supported by retrieved chunks
+  answer_correctness_threshold: 0.75    # LLM judge: agreement with golden answer
+  latency_p95_ms_threshold: 8000        # end-to-end pipeline P95
+  max_error_rate: 0.0
 
 observability:
   log_dir: "./logs"
   log_requests: true
   log_level: "INFO"
+  max_traces_in_memory: 1000
+  # Per-request quality SLOs: breaches are logged as "QUALITY ALERT" and
+  # counted in the Prometheus metric docuquery_quality_alerts_total{reason}
+  alerts:
+    min_citation_coverage: 0.90
+    max_latency_ms: 8000
+
+ingest:
+  # /api/ingest only accepts paths inside this directory
+  allowed_root: "data"
 
 app:
   host: "0.0.0.0"

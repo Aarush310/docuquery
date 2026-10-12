@@ -11,11 +11,28 @@ The hybrid approach:
   4. Top-k results are returned sorted by fused score
 """
 
+import re
 from dataclasses import dataclass
 
-import chromadb
-from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
+_TOKEN_RE = re.compile(r"\w+")
+
+
+def tokenize(text: str) -> list[str]:
+    """Lower-cased word tokens for BM25 (drops punctuation, so "RAG?" matches "RAG")."""
+    return _TOKEN_RE.findall(text.lower())
+
+
+def normalize_bm25(scores) -> list[float]:
+    """Scale BM25 scores to [0, 1] by the best score (all zeros stay zero)."""
+    scores = [max(0.0, float(s)) for s in scores]
+    best = max(scores, default=0.0)
+    return [s / best for s in scores] if best > 0 else [0.0] * len(scores)
+
+
+def fuse_scores(bm25_norm: list[float], vector_sims: list[float],
+                bm25_weight: float, vector_weight: float) -> list[float]:
+    """Weighted linear fusion of normalized keyword and semantic scores."""
+    return [bm25_weight * b + vector_weight * v for b, v in zip(bm25_norm, vector_sims)]
 
 
 @dataclass
@@ -48,10 +65,13 @@ class Retriever:
         self.embed_cfg = config["embedding"]
         self.store_cfg = config["vector_store"]
 
+        import chromadb
+        from sentence_transformers import SentenceTransformer
+
         # Load embedding model
         self.embedder = SentenceTransformer(self.embed_cfg["model"])
 
-        # Connect to ChromaDB
+        # Connect to ChromaDB (raises if documents haven't been ingested yet)
         self.client = chromadb.PersistentClient(path=self.store_cfg["persist_directory"])
         self.collection = self.client.get_collection(name=self.store_cfg["collection_name"])
 
@@ -65,8 +85,15 @@ class Retriever:
         self._all_docs = results["documents"]
         self._all_metadatas = results["metadatas"]
 
-        tokenized = [doc.lower().split() for doc in self._all_docs]
-        self._bm25 = BM25Okapi(tokenized)
+        if not self._all_docs:
+            raise RuntimeError("The document index is empty — run ingestion first.")
+
+        from rank_bm25 import BM25Okapi
+        self._bm25 = BM25Okapi([tokenize(doc) for doc in self._all_docs])
+
+    @property
+    def num_chunks(self) -> int:
+        return len(self._all_ids)
 
     def search(self, query: str, top_k: int | None = None) -> list[RetrievedChunk]:
         """
@@ -77,9 +104,7 @@ class Retriever:
         vector_weight = self.ret_cfg["vector_weight"]
 
         # ── BM25 scores ──
-        bm25_scores = self._bm25.get_scores(query.lower().split())
-        bm25_max = max(bm25_scores) if max(bm25_scores) > 0 else 1.0
-        bm25_norm = [s / bm25_max for s in bm25_scores]
+        bm25_norm = normalize_bm25(self._bm25.get_scores(tokenize(query)))
 
         # ── Vector scores ──
         query_embedding = self.embedder.encode(query).tolist()
@@ -98,16 +123,16 @@ class Retriever:
             vector_score_map[cid] = 1.0 - distance  # cosine distance → similarity
 
         # ── Fuse scores ──
+        # Chunks outside the vector candidate set get a semantic score of 0.
+        vector_sims = [vector_score_map.get(doc_id, 0.0) for doc_id in self._all_ids]
+        fused = fuse_scores(bm25_norm, vector_sims, bm25_weight, vector_weight)
+
         scored = []
         for i, doc_id in enumerate(self._all_ids):
-            bm25_s = bm25_norm[i] * bm25_weight
-            vec_s = vector_score_map.get(doc_id, 0.0) * vector_weight
-            combined = bm25_s + vec_s
-
             scored.append(RetrievedChunk(
                 chunk_id=doc_id,
                 text=self._all_docs[i],
-                score=combined,
+                score=fused[i],
                 source=self._all_metadatas[i].get("source", "unknown"),
                 chunk_index=self._all_metadatas[i].get("chunk_index", -1),
             ))

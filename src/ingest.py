@@ -13,15 +13,19 @@ Usage:
 import argparse
 import hashlib
 import sys
+from functools import lru_cache
 from pathlib import Path
 
-import chromadb
-import tiktoken
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from sentence_transformers import SentenceTransformer
 
 from src.config import load_config
+
+SUPPORTED_EXTENSIONS = (".pdf", ".md", ".txt", ".text")
+
+
+class IngestError(Exception):
+    """Raised when ingestion cannot proceed (bad path, no supported files)."""
 
 console = Console()
 
@@ -61,11 +65,14 @@ def load_document(path: str) -> str:
 
 # ─── Chunking ─────────────────────────────────────────────────────
 
-_encoder = tiktoken.get_encoding("cl100k_base")
+@lru_cache(maxsize=1)
+def get_encoder():
+    import tiktoken
+    return tiktoken.get_encoding("cl100k_base")
 
 
 def count_tokens(text: str) -> int:
-    return len(_encoder.encode(text))
+    return len(get_encoder().encode(text))
 
 
 def chunk_text(
@@ -105,14 +112,14 @@ def chunk_text(
                 current_tokens = overlap_tokens
 
             # Split the long paragraph by tokens
-            tokens = _encoder.encode(para)
+            tokens = get_encoder().encode(para)
             start = 0
             while start < len(tokens):
                 end = min(start + chunk_size, len(tokens))
                 chunk_tokens = tokens[start:end]
                 if len(chunk_tokens) >= min_chunk_size:
                     chunks.append({
-                        "text": _encoder.decode(chunk_tokens),
+                        "text": get_encoder().decode(chunk_tokens),
                         "token_count": len(chunk_tokens),
                     })
                 start += chunk_size - chunk_overlap
@@ -161,28 +168,29 @@ def generate_chunk_id(source: str, index: int) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def ingest_documents(source_path: str, config: dict):
-    """Main ingestion pipeline."""
+def collect_files(source_path: str | Path) -> list[Path]:
+    source = Path(source_path)
+    if source.is_file():
+        files = [source] if source.suffix.lower() in SUPPORTED_EXTENSIONS else []
+    elif source.is_dir():
+        files = sorted(p for p in source.rglob("*") if p.suffix.lower() in SUPPORTED_EXTENSIONS)
+    else:
+        raise IngestError(f"Path not found: {source_path}")
+    if not files:
+        raise IngestError(f"No supported documents ({', '.join(SUPPORTED_EXTENSIONS)}) in {source_path}")
+    return files
+
+
+def ingest_documents(source_path: str, config: dict) -> dict:
+    """Main ingestion pipeline. Rebuilds the collection; returns ingestion stats."""
+    import chromadb
+    from sentence_transformers import SentenceTransformer
+
     chunk_cfg = config["chunking"]
     embed_cfg = config["embedding"]
     store_cfg = config["vector_store"]
 
-    # Collect files
-    source = Path(source_path)
-    if source.is_file():
-        files = [source]
-    elif source.is_dir():
-        files = sorted(
-            p for p in source.rglob("*")
-            if p.suffix.lower() in (".pdf", ".md", ".txt", ".text")
-        )
-    else:
-        console.print(f"[red]✗ Path not found: {source_path}[/red]")
-        sys.exit(1)
-
-    if not files:
-        console.print("[red]✗ No supported documents found.[/red]")
-        sys.exit(1)
+    files = collect_files(source_path)
 
     console.print(f"\n[bold]📂 Found {len(files)} document(s) to ingest[/bold]\n")
 
@@ -261,6 +269,7 @@ def ingest_documents(source_path: str, config: dict):
     console.print(f"   Chunks:    {total_chunks}")
     console.print(f"   Tokens:    {total_tokens:,}")
     console.print(f"   Stored in: {store_cfg['persist_directory']}\n")
+    return {"documents": len(files), "chunks": total_chunks, "tokens": total_tokens}
 
 
 def main():
@@ -270,7 +279,11 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-    ingest_documents(args.source, config)
+    try:
+        ingest_documents(args.source, config)
+    except IngestError as e:
+        console.print(f"[red]✗ {e}[/red]")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
