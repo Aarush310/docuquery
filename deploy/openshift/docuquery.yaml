@@ -1,0 +1,104 @@
+# DocuQuery on OpenShift
+#
+#   oc new-project docuquery
+#   oc create secret generic docuquery-llm --from-literal=GROQ_API_KEY=...   # or ANTHROPIC_API_KEY
+#   oc apply -f deploy/openshift/docuquery.yaml
+#   oc get route docuquery
+#
+# Replace the image below with your pushed image (e.g. quay.io/<you>/docuquery:latest).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docuquery-data
+  labels: {app: docuquery}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docuquery
+  labels: {app: docuquery}
+spec:
+  # One replica: the vector index lives on a ReadWriteOnce volume and metrics are per-pod.
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: docuquery}
+  template:
+    metadata:
+      labels: {app: docuquery}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: docuquery
+          image: quay.io/aarush310/docuquery:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: DOCUQUERY_LLM_PROVIDER
+              value: groq            # or: anthropic
+          envFrom:
+            - secretRef:
+                name: docuquery-llm
+          volumeMounts:
+            - name: data
+              mountPath: /app/var
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 3Gi}
+          # Models load on first start, so give the pod time before liveness kicks in.
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: docuquery-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docuquery
+  labels: {app: docuquery}
+spec:
+  selector: {app: docuquery}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: docuquery
+  labels: {app: docuquery}
+spec:
+  to:
+    kind: Service
+    name: docuquery
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

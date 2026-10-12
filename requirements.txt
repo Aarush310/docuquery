@@ -1,11 +1,13 @@
 # Core
-google-generativeai>=0.5.0
-chromadb>=0.4.0
+chromadb>=0.5.0
 sentence-transformers>=2.2.0
+
+# LLM providers (choose with generation.provider in configs/config.yaml)
+groq>=0.9.0
+anthropic>=0.40.0
 
 # Document loading
 pymupdf>=1.23.0
-markdown>=3.5.0
 
 # Tokenization
 tiktoken>=0.5.0
@@ -17,16 +19,12 @@ rank-bm25>=0.2.2
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 jinja2>=3.1.0
-python-multipart>=0.0.6
+
+# Observability
+prometheus-client>=0.20.0
 
 # Configuration
 pyyaml>=6.0.0
 
-# Evaluation
-pandas>=2.0.0
-
 # CLI
 rich>=13.0.0
-
-# Testing
-pytest>=7.0.0
