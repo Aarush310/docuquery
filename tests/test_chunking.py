@@ -22,7 +22,10 @@ class TestCountTokens:
 
 class TestChunking:
     def test_short_text_single_chunk(self):
-        text = "This is a short paragraph that has just enough words and tokens in it to clear the minimum chunk size threshold imposed by the default chunking configuration so the test passes reliably across environments."
+        # One paragraph of roughly 110 tokens: above min_chunk_size (50), below chunk_size (600)
+        sentence = "This short paragraph repeats one sentence so it clears the minimum chunk size but stays far below the maximum. "
+        text = (sentence * 5).strip()
+        assert 50 < count_tokens(text) < 600
         assert len(chunk_text(text, chunk_size=600)) == 1
 
     def test_long_text_multiple_chunks(self):
