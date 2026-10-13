@@ -72,8 +72,8 @@ On first start the entrypoint ingests `data/` into the volume, then serves the A
 ### Deploy to OpenShift
 
 ```bash
-oc new-project docuquery
 oc create secret generic docuquery-llm --from-literal=GROQ_API_KEY=...
+oc apply -f deploy/openshift/build.yaml        # ImageStream + BuildConfig: builds the image in-cluster from GitHub
 oc apply -f deploy/openshift/docuquery.yaml    # PVC, Deployment (startup/liveness/readiness probes), Service, Route
 ```
 
@@ -142,7 +142,7 @@ docuquery/
 │   └── query.py               # CLI
 ├── tests/                     # pytest suite (runs without models or API keys)
 ├── Dockerfile, docker-entrypoint.sh
-├── deploy/openshift/          # PVC, Deployment, Service, Route
+├── deploy/openshift/          # in-cluster build, PVC, Deployment, Service, Route
 └── .github/workflows/ci.yml
 ```
 

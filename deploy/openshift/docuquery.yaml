@@ -1,11 +1,13 @@
 # DocuQuery on OpenShift
 #
-#   oc new-project docuquery
 #   oc create secret generic docuquery-llm --from-literal=GROQ_API_KEY=...   # or ANTHROPIC_API_KEY
-#   oc apply -f deploy/openshift/docuquery.yaml
+#   oc apply -f deploy/openshift/build.yaml        # build the image in-cluster from GitHub
+#   oc apply -f deploy/openshift/docuquery.yaml    # PVC, Deployment, Service, Route
 #   oc get route docuquery
 #
-# Replace the image below with your pushed image (e.g. quay.io/<you>/docuquery:latest).
+# The Deployment uses the in-cluster ImageStream (docuquery:latest) and rolls out
+# automatically on every new build. To use a registry image instead (e.g.
+# quay.io/<you>/docuquery:latest), set it as the image and drop the trigger annotation.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -22,6 +24,10 @@ kind: Deployment
 metadata:
   name: docuquery
   labels: {app: docuquery}
+  annotations:
+    image.openshift.io/triggers: >-
+      [{"from":{"kind":"ImageStreamTag","name":"docuquery:latest"},
+        "fieldPath":"spec.template.spec.containers[?(@.name==\"docuquery\")].image"}]
 spec:
   # One replica: the vector index lives on a ReadWriteOnce volume and metrics are per-pod.
   replicas: 1
@@ -38,7 +44,7 @@ spec:
     spec:
       containers:
         - name: docuquery
-          image: quay.io/aarush310/docuquery:latest
+          image: docuquery:latest
           ports:
             - containerPort: 8000
               name: http
