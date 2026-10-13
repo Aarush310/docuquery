@@ -18,6 +18,8 @@ _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "con
 PROVIDER_DEFAULT_MODELS = {
     "groq": "llama-3.3-70b-versatile",
     "anthropic": "claude-haiku-5-5",
+    # For vLLM, set DOCUQUERY_LLM_MODEL to the served model name.
+    "vllm": "ibm-granite/granite-3.3-8b-instruct",
 }
 
 DEFAULTS = {

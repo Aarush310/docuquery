@@ -11,7 +11,7 @@ A **Retrieval-Augmented Generation** service that answers questions from your do
 - **Hybrid retrieval** — BM25 keyword scores + dense vector similarity, normalized and fused with configurable weights (0.3 / 0.7)
 - **Cross-encoder re-ranking** — `ms-marco-MiniLM-L-6-v2` re-scores (query, chunk) pairs jointly; top 3 go to the LLM
 - **Citation enforcement** — every claim must cite a chunk ID; coverage is measured per answer and citations to chunks that weren't retrieved are flagged
-- **Pluggable LLM** — Groq (Llama 3.3 70B, free tier) or Anthropic Claude, switched by config or env var
+- **Pluggable LLM** — Groq (Llama 3.3 70B, free tier), Anthropic Claude, or any OpenAI-compatible endpoint such as a model **served with vLLM on OpenShift AI**, switched by config or env var
 - **Observability** — per-request traces (JSON lines), per-stage latency, token accounting, throughput, `/metrics` for Prometheus
 - **Quality alerting** — answers below the citation-coverage SLO, slower than the latency SLO, or with invalid citations are logged as `QUALITY ALERT` and counted in `docuquery_quality_alerts_total{reason}`
 - **Evaluation gate** — golden Q/A set scored on 5 gates; CI fails the PR if any is breached
@@ -117,8 +117,9 @@ Everything lives in `configs/config.yaml`; environment variables override it per
 
 | Variable | Overrides |
 |---|---|
-| `DOCUQUERY_LLM_PROVIDER` | `generation.provider` (`groq` or `anthropic`; also switches to that provider's default model) |
+| `DOCUQUERY_LLM_PROVIDER` | `generation.provider` (`groq`, `anthropic` or `vllm`; also switches to that provider's default model) |
 | `DOCUQUERY_LLM_MODEL` | `generation.model` |
+| `DOCUQUERY_LLM_BASE_URL` / `DOCUQUERY_LLM_API_KEY` | Endpoint and token for the `vllm` provider (e.g. an OpenShift AI model-serving route ending in `/v1`) |
 | `DOCUQUERY_CHROMA_DIR` | `vector_store.persist_directory` |
 | `DOCUQUERY_LOG_DIR` | `observability.log_dir` |
 | `DOCUQUERY_DATA_DIR` | `ingest.allowed_root` |
@@ -157,7 +158,7 @@ The suite covers chunking, citation parsing, score fusion and re-ranking, provid
 
 ## Tech stack
 
-Python 3.11+ · FastAPI · ChromaDB · sentence-transformers · rank-bm25 · Groq / Anthropic Claude · tiktoken · prometheus-client · Docker / OpenShift · GitHub Actions
+Python 3.11+ · FastAPI · ChromaDB · sentence-transformers · rank-bm25 · Groq / Anthropic Claude / vLLM · tiktoken · prometheus-client · Docker / OpenShift · GitHub Actions
 
 ## License
 

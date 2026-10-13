@@ -9,6 +9,8 @@ The LLM provider is pluggable (configs/config.yaml -> generation.provider, or
 the DOCUQUERY_LLM_PROVIDER env var):
   - "groq"      — Llama 3.3 70B via Groq (free tier)   needs GROQ_API_KEY
   - "anthropic" — Claude via the Anthropic API          needs ANTHROPIC_API_KEY
+  - "vllm"      — any OpenAI-compatible endpoint, e.g. a model served by vLLM
+                  on OpenShift AI (KServe)                needs DOCUQUERY_LLM_BASE_URL
 """
 
 import os
@@ -98,7 +100,48 @@ class AnthropicClient(LLMClient):
         )
 
 
-PROVIDERS = {"groq": GroqClient, "anthropic": AnthropicClient}
+class OpenAICompatibleClient(LLMClient):
+    """
+    Talks to any server exposing the OpenAI chat-completions API — notably vLLM,
+    which is how OpenShift AI serves open models (KServe + vLLM runtime).
+
+    DOCUQUERY_LLM_BASE_URL  e.g. https://granite-myproject.apps.cluster.example.com/v1
+    DOCUQUERY_LLM_API_KEY   optional bearer token (e.g. a service-account token)
+    """
+
+    provider = "vllm"
+
+    def __init__(self, client=None, base_url: str | None = None, api_key: str | None = None):
+        if client is None:
+            import httpx
+
+            base_url = (base_url or _require_env("DOCUQUERY_LLM_BASE_URL")).rstrip("/")
+            api_key = api_key if api_key is not None else os.environ.get("DOCUQUERY_LLM_API_KEY", "")
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            client = httpx.Client(base_url=base_url, headers=headers, timeout=120)
+        self._client = client
+
+    def complete(self, system, user, model, temperature, max_tokens):
+        response = self._client.post("/chat/completions", json={
+            "model": model,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        })
+        response.raise_for_status()
+        data = response.json()
+        usage = data.get("usage") or {}
+        return Completion(
+            text=data["choices"][0]["message"]["content"] or "",
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+        )
+
+
+PROVIDERS = {"groq": GroqClient, "anthropic": AnthropicClient, "vllm": OpenAICompatibleClient}
 
 
 def make_llm_client(provider: str) -> LLMClient:

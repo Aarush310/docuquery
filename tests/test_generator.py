@@ -6,7 +6,7 @@ Run: pytest tests/test_generator.py -v
 import pytest
 
 from src.config import load_config
-from src.generator import AnthropicClient, Generator, GroqClient, make_llm_client
+from src.generator import AnthropicClient, Generator, GroqClient, OpenAICompatibleClient, make_llm_client
 from tests.fakes import FakeLLM, make_chunk, sdk_ns
 
 CONFIG = {"generation": {"provider": "fake", "model": "m", "temperature": 0.1,
@@ -54,6 +54,34 @@ class TestProviderClients:
         assert (out.text, out.prompt_tokens, out.completion_tokens) == ("hello", 7, 2)
         assert seen["system"] == "s" and seen["messages"] == [{"role": "user", "content": "u"}]
 
+    def test_vllm_openai_compatible_wrapper(self):
+        import httpx
+
+        seen = {}
+
+        def handler(request):
+            seen["url"] = str(request.url)
+            seen["auth"] = request.headers.get("authorization")
+            seen["body"] = request.read()
+            return httpx.Response(200, json={
+                "choices": [{"message": {"content": "served by vLLM"}}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 5},
+            })
+
+        http = httpx.Client(base_url="https://granite.apps.example.com/v1",
+                            headers={"Authorization": "Bearer tok"},
+                            transport=httpx.MockTransport(handler))
+        out = OpenAICompatibleClient(client=http).complete("s", "u", "granite", 0.1, 10)
+        assert (out.text, out.prompt_tokens, out.completion_tokens) == ("served by vLLM", 11, 5)
+        assert seen["url"] == "https://granite.apps.example.com/v1/chat/completions"
+        assert seen["auth"] == "Bearer tok"
+        assert b'"model":"granite"' in seen["body"].replace(b" ", b"")
+
+    def test_vllm_needs_base_url(self, monkeypatch):
+        monkeypatch.delenv("DOCUQUERY_LLM_BASE_URL", raising=False)
+        with pytest.raises(RuntimeError, match="DOCUQUERY_LLM_BASE_URL"):
+            make_llm_client("vllm")
+
     def test_unknown_provider(self):
         with pytest.raises(ValueError, match="Unknown LLM provider"):
             make_llm_client("nope")
@@ -82,6 +110,10 @@ class TestConfig:
         cfg = load_config()
         assert cfg["generation"]["model"] == "custom-model"
         assert cfg["vector_store"]["persist_directory"] == "/data/chroma"
+
+    def test_env_switches_to_vllm(self, monkeypatch):
+        monkeypatch.setenv("DOCUQUERY_LLM_PROVIDER", "vllm")
+        assert load_config()["generation"]["provider"] == "vllm"
 
     def test_bad_provider_rejected(self, monkeypatch):
         monkeypatch.setenv("DOCUQUERY_LLM_PROVIDER", "openai")
