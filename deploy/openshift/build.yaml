@@ -1,0 +1,38 @@
+# In-cluster image build for DocuQuery (no external registry needed).
+#
+#   oc apply -f deploy/openshift/build.yaml
+#   oc logs -f bc/docuquery          # first build downloads PyTorch + models (~10 min)
+#
+# The Deployment in docuquery.yaml rolls out automatically when docuquery:latest updates.
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: docuquery
+  labels: {app: docuquery}
+spec:
+  lookupPolicy:
+    local: true
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: docuquery
+  labels: {app: docuquery}
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/Aarush310/docuquery.git
+      ref: main
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: docuquery:latest
+  triggers:
+    - type: ConfigChange
+  resources:
+    limits: {memory: 4Gi}
