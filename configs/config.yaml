@@ -29,7 +29,9 @@ retrieval:
 
 generation:
   # LLM provider: "groq" (Llama 3.3 70B, free tier — needs GROQ_API_KEY)
-  #            or "anthropic" (Claude — needs ANTHROPIC_API_KEY).
+  #            or "anthropic" (Claude — needs ANTHROPIC_API_KEY)
+  #            or "vllm" (any OpenAI-compatible endpoint, e.g. a model served with
+  #               vLLM on OpenShift AI — needs DOCUQUERY_LLM_BASE_URL).
   # Override at runtime with DOCUQUERY_LLM_PROVIDER / DOCUQUERY_LLM_MODEL.
   provider: "groq"
   model: "llama-3.3-70b-versatile"
